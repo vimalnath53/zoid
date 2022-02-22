@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<style>
+#paypal-buttons-container{
+    width: 50%;
+}
+</style>
+
+<input class ="savedorpp" name="selectoption" id="saved_payment_method" type="radio" value="SavedPaymentMethod" checked/>Saved Payment Method<br/> 
+<input class ="savedorpp" name="selectoption" id="pay_with_paypal" type="radio" value="PaywithPayPal"/>Pay with PayPal<br/> 
+
+
+<div id="pay4_later_msg" data-pp-message data-pp-layout="text" data-pp-text-color="black" data-pp-logo-type="inline" data-pp-amount="">
+</div>
+
+
+Amount : <input id="amount_val" type="textbox" value="100.00"/><br/>
+<div id="paypal-buttons-container"> </div>
+
+
+<!-- Load the Braintree components -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="https://js.braintreegateway.com/web/3.82.0/js/client.min.js"></script>
+<script src="https://js.braintreegateway.com/web/3.82.0/js/data-collector.min.js"></script>
+<script src="https://js.braintreegateway.com/web/3.82.0/js/paypal-checkout.min.js"></script>
+
+<script>
+// Create a client.
+$( document ).ready(function() {  
+$("input[type=radio]").attr('disabled', true);
+$("#amount_val").attr('disabled', true);
+ var token = 'sandbox_q7dr2y96_zynjg7c9rd5c95z2';
+      var btClientInstance = braintree.client.create({
+        authorization: token,
+      });
+
+
+// load Pay in 4 by default
+renderButton('SavedPaymentMethod');
+$('.savedorpp').click(function(){
+    $('#pay4_later_msg').attr('data-pp-amount',$('#amount_val').val());
+    var selectedOption = $("input[type='radio']:checked").val();
+    renderButton(selectedOption);
+    $("input[type=radio]").attr('disabled', true);
+    $("#amount_val").attr('disabled', true);
+});
+
+document.getElementById("amount_val").addEventListener("blur", () => {
+ var selectedOption = $("input[type='radio']:checked").val();
+ $('#pay4_later_msg').attr('data-pp-amount',$('#amount_val').val());
+    renderButton(selectedOption);
+    $("input[type=radio]").attr('disabled', true);
+    $("#amount_val").attr('disabled', true);
+});
+
+function renderButton(selectedMethod) {
+    var loadSDKParams = {
+      components: 'buttons,messages',
+      currency: 'AUD',
+      'buyer-country': 'AU',
+      'disable-funding': 'card',
+      'enable-funding': 'paylater',
+      dataAttributes: {
+       amount: document.getElementById('amount_val').value
+      },
+      intent: 'capture'
+    };
+    btClientInstance.then(function (clientInstance) {
+    // Create a PayPal Checkout component.
+
+    braintree.paypalCheckout.create({
+      client: clientInstance
+    }, function (paypalCheckoutErr, paypalCheckoutInstance) {
+      paypalCheckoutInstance.loadPayPalSDK(
+       loadSDKParams
+      , function () {
+        if(selectedMethod == 'SavedPaymentMethod') {
+
+            if((document.getElementById('amount_val').value < 30 || document.getElementById('amount_val').value > 1500)) {
+              return false; // dont disable Pay in 4 button
+            }  else {
+              var FUNDING_SOURCES = [paypal.FUNDING.PAYLATER];
+            }
+        } 
+        if(selectedMethod == 'PaywithPayPal')  {
+          if((document.getElementById('amount_val').value < 30 || document.getElementById('amount_val').value > 1500)) {
+            var FUNDING_SOURCES = [paypal.FUNDING.PAYPAL];
+          } else {
+            var FUNDING_SOURCES = [paypal.FUNDING.PAYPAL,paypal.FUNDING.PAYLATER];
+          }
+          
+        }
+     
+      console.log(FUNDING_SOURCES);
+       FUNDING_SOURCES.forEach(function(fundingSource) {  
+         var button = paypal.Buttons({
+          fundingSource: fundingSource,
+          style: {
+                shape: 'rect',
+                color: 'gold',
+                layout: 'vertical',
+              },
+            createOrder: function () {
+              return paypalCheckoutInstance.createPayment({
+                flow: 'checkout', // Required
+                amount: document.getElementById('amount_val').value, // Required
+                currency: 'AUD', // Required, must match the currency passed in with loadPayPalSDK
+                intent: 'capture', // Must match the intent passed in with loadPayPalSDK
+              });
+            },
+
+            onApprove: function (data, actions) {
+              return paypalCheckoutInstance.tokenizePayment(data, function (err, payload) {
+                // Submit `payload.nonce` to your server
+              
+              });
+            },
+
+            onCancel: function (data) {
+              console.log('PayPal payment cancelled', JSON.stringify(data, 0, 2));
+            },
+
+           onInit:  function(data, actions) {
+            },
+
+            onError: function (err) {
+              console.error('PayPal error', err);
+            },
+          });
+       
+        if (!button.isEligible()) {
+          // Skip rendering if not eligible
+           console.log("buttons are not eligible");
+           $("input[type=radio]").attr('disabled', false);
+         }
+         button.render('#paypal-buttons-container').then(function(){
+            console.log('ready');
+          });
+       });
+      });
+
+      });
+  });
+}
+});
+</script>
